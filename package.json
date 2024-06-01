@@ -3,19 +3,26 @@
   "displayName": "python-refactoring",
   "description": "",
   "version": "0.0.1",
+  "homepage": "https://github.com/YotamAlon/python-refactoring",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YotamAlon/python-refactoring.git"
+  },
   "engines": {
     "vscode": "^1.89.0"
   },
   "categories": [
     "Programming Languages"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:python"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "python-refactoring.inline",
-        "title": "Inline"
+        "title": "Refactor: Inline"
       }
     ]
   },
@@ -28,12 +35,12 @@
     "test": "vscode-test"
   },
   "extensionDependencies": [
-		"ms-python.python"
-	],
-	"dependencies": {
-		"@vscode/python-extension": "^1.0.5",
-		"@types/vscode": "^1.89.0"
-	},
+    "ms-python.python"
+  ],
+  "dependencies": {
+    "@vscode/python-extension": "^1.0.5",
+    "@types/vscode": "^1.89.0"
+  },
   "devDependencies": {
     "@types/vscode": "^1.89.0",
     "@types/mocha": "^10.0.6",
