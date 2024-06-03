@@ -39,7 +39,32 @@ async function executeInline(scriptsDir: string, environment: ResolvedEnvironmen
 	const document = editor.document;
 	const offset = document.offsetAt(editor.selection.active);
 
-	const inline = spawn(environment.path, [inlineScript, projectDir, document.fileName, offset.toString()]);
+	run_script(environment.path, [inlineScript, projectDir, document.fileName, offset.toString()]);
+}
+
+async function executeIntroduceParameter(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor) {
+	const introduceParameterScript = path.join(scriptsDir, 'introduce_parameter.py');
+	const document = editor.document;
+	const offset = document.offsetAt(editor.selection.active);
+
+	const input = await vscode.window.showInputBox().then(parameter_name => {
+		if (!parameter_name) {
+			return;
+		}
+		run_script(environment.path, [introduceParameterScript, projectDir, document.fileName, offset.toString(), parameter_name]);
+	});
+}
+
+async function executeLocalToField(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor) {
+	const localToFieldScript = path.join(scriptsDir, 'local_to_field.py');
+	const document = editor.document;
+	const offset = document.offsetAt(editor.selection.active);
+
+	run_script(environment.path, [localToFieldScript, projectDir, document.fileName, offset.toString()]);
+}
+
+function run_script(command: string, args: string[]) {
+	const inline = spawn(command, args);
 
 	inline.stdout.on("data", data => {
 		console.log(`stdout: ${data}`);
@@ -58,6 +83,49 @@ async function executeInline(scriptsDir: string, environment: ResolvedEnvironmen
 	});
 }
 
+interface commandExecutor {
+	(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor): Promise<void>
+}
+
+async function runCommand(func: commandExecutor) {
+	const pythonApi: PythonExtension = await PythonExtension.api();
+
+	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
+
+	const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
+	const scriptsDir = path.join(__dirname, '..', 'python');
+	if (!environment) {
+		vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
+		return;
+	}
+	const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.path);
+	if (!workspacePaths) {
+		vscode.window.showInformationMessage('No project selected');
+		return;
+	}
+
+	const editor = vscode.window.activeTextEditor;
+	if (!editor) {
+		vscode.window.showInformationMessage('No editor is open');
+		return;
+	}
+
+	const document = editor.document;
+	if (!document) {
+		vscode.window.showInformationMessage('No file selected');
+		return;
+	}
+
+	const projectDir = workspacePaths.find(path => document.fileName.includes(path));
+	if (!projectDir) {
+		vscode.window.showInformationMessage('No project contains the open file');
+		return;
+	}
+
+	await func(scriptsDir, environment, projectDir, editor);
+
+	vscode.window.showInformationMessage('Done!');
+}
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
@@ -67,61 +135,19 @@ export async function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "python-refactoring" is now active!');
 	await setUp();
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('python-refactoring.inline', async () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		// Load the Python extension API
-		const pythonApi: PythonExtension = await PythonExtension.api();
-
-		// This will return something like /usr/bin/python
-		const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
-
-		// `environmentPath.path` carries the value of the setting. Note that this path may point to a folder and not the
-		// python binary. Depends entirely on how the env was created.
-		// E.g., `conda create -n myenv python` ensures the env has a python binary
-		// `conda create -n myenv` does not include a python binary.
-		// Also, the path specified may not be valid, use the following to get complete details for this environment if
-		// need be.
-
-		const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
-		const scriptsDir = path.join(__dirname, '..', 'python');
-		if (!environment) {
-			vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
-			return;
-		}
-		const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.path);
-		if (!workspacePaths) {
-			vscode.window.showInformationMessage('No project selected');
-			return;
-		}
-
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) {
-			vscode.window.showInformationMessage('No editor is open');
-			return;
-		}
-
-		const document = editor.document;
-		if (!document) {
-			vscode.window.showInformationMessage('No file selected');
-			return;
-		}
-
-		const projectDir = workspacePaths.find(path => document.fileName.includes(path));
-		if (!projectDir) {
-			vscode.window.showInformationMessage('No project contains the open file');
-			return;
-		}
-
-		await executeInline(scriptsDir, environment, projectDir, editor);
-
-		vscode.window.showInformationMessage('Done!');
+	let inline = vscode.commands.registerCommand('python-refactoring.inline', async () => {
+		runCommand(executeInline);
 	});
 
-	context.subscriptions.push(disposable);
+	let introduceParameter = vscode.commands.registerCommand('python-refactoring.introduce_parameter', async () => {
+		runCommand(executeIntroduceParameter);
+	});
+	let localToField = vscode.commands.registerCommand('python-refactoring.local_to_field', async () => {
+		runCommand(executeLocalToField);
+	});
+	context.subscriptions.push(inline);
+	context.subscriptions.push(introduceParameter);
+	context.subscriptions.push(localToField);
 }
 
 // This method is called when your extension is deactivated

@@ -23,6 +23,14 @@
       {
         "command": "python-refactoring.inline",
         "title": "Refactor: Inline"
+      },
+      {
+        "command": "python-refactoring.introduce_parameter",
+        "title": "Refactor: Introduce parameter"
+      },
+      {
+        "command": "python-refactoring.local_to_field",
+        "title": "Refactor: Change a local variable to field"
       }
     ]
   },
