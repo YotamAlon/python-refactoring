@@ -14,7 +14,8 @@ def main(project_path: str, resource_path: str, offset: int, parameter_name: str
     introduce_parameter = IntroduceParameter(myproject, resource, offset)
     changes = introduce_parameter.get_changes(parameter_name)
 
-    print(changes.get_description())
+    for change in changes:
+        print(change.get_description())
 
     myproject.do(changes)
 

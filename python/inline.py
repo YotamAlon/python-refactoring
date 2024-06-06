@@ -14,7 +14,8 @@ def main(project_path: str, resource_path: str, offset: int):
     inline = create_inline(myproject, resource, offset)
     changes = inline.get_changes()
 
-    print(changes.get_description())
+    for change in changes.changes:
+        print(change.get_description())
 
     myproject.do(changes)
 

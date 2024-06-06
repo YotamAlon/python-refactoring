@@ -39,7 +39,7 @@ async function executeInline(scriptsDir: string, environment: ResolvedEnvironmen
 	const document = editor.document;
 	const offset = document.offsetAt(editor.selection.active);
 
-	run_script(environment.path, [inlineScript, projectDir, document.fileName, offset.toString()]);
+	let diffs = await run_script(environment.path, [inlineScript, projectDir, document.fileName, offset.toString()]);
 }
 
 async function executeIntroduceParameter(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor) {
@@ -47,12 +47,12 @@ async function executeIntroduceParameter(scriptsDir: string, environment: Resolv
 	const document = editor.document;
 	const offset = document.offsetAt(editor.selection.active);
 
-	const input = await vscode.window.showInputBox().then(parameter_name => {
-		if (!parameter_name) {
-			return;
-		}
-		run_script(environment.path, [introduceParameterScript, projectDir, document.fileName, offset.toString(), parameter_name]);
-	});
+	// const input = await vscode.window.showInputBox().then(parameter_name => {
+	// 	if (!parameter_name) {
+	// 		return;
+	// 	}
+	// 	let diffs = await run_script(environment.path, [introduceParameterScript, projectDir, document.fileName, offset.toString(), parameter_name]);
+	// });
 }
 
 async function executeLocalToField(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor) {
@@ -60,15 +60,18 @@ async function executeLocalToField(scriptsDir: string, environment: ResolvedEnvi
 	const document = editor.document;
 	const offset = document.offsetAt(editor.selection.active);
 
-	run_script(environment.path, [localToFieldScript, projectDir, document.fileName, offset.toString()]);
+	let diffs = await run_script(environment.path, [localToFieldScript, projectDir, document.fileName, offset.toString()]);
 }
 
-function run_script(command: string, args: string[]) {
+function runScript(command: string, args: string[], callback: CallableFunction) {
 	const inline = spawn(command, args);
+	let diffs: Array<string> = [];
 
-	inline.stdout.on("data", data => {
-		console.log(`stdout: ${data}`);
+	inline.stdout.forEach(diff => {
+		diffs.push(diff);
 	});
+
+	inline.stdout.on('end', callback(diffs));
 
 	inline.stderr.on("data", data => {
 		console.log(`stderr: ${data}`);
@@ -81,6 +84,13 @@ function run_script(command: string, args: string[]) {
 	inline.on("close", code => {
 		console.log(`child process exited with code ${code}`);
 	});
+}
+
+let run_script = util.promisify(runScript);
+
+async function applyDiffs(diffs: Array<string>): Promise<void> {
+	let edit = new vscode.WorkspaceEdit();
+
 }
 
 interface commandExecutor {
@@ -148,6 +158,20 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(inline);
 	context.subscriptions.push(introduceParameter);
 	context.subscriptions.push(localToField);
+	class InlineCodeAction implements vscode.CodeActionProvider {
+		static readonly kind = vscode.CodeActionKind.RefactorInline
+		static readonly inlineCodeAction = new vscode.CodeAction('Inline', InlineCodeAction.kind);
+		provideCodeActions(): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
+			let action = structuredClone(InlineCodeAction.inlineCodeAction);
+			action.command = {command: "python-refactoring.inline", title: 'Inline', arguments: []};
+			return [action];
+		}
+	}
+	vscode.languages.registerCodeActionsProvider(
+		{ scheme: 'file', language: 'python' },
+		new InlineCodeAction(),
+		{ providedCodeActionKinds: [InlineCodeAction.kind] }
+	);
 }
 
 // This method is called when your extension is deactivated
