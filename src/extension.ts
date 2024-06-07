@@ -1,10 +1,13 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import { PythonExtension, ResolvedEnvironment } from '@vscode/python-extension';
-import { spawn, exec } from "child_process";
-import * as path from 'path';
+import { PythonExtension } from '@vscode/python-extension';
+import { exec } from "child_process";
 import util from 'node:util';
+import { text } from 'stream/consumers';
+import { executeInline, executeIntroduceParameter, executeLocalToField, getExtractParameterEdits, getInlineEdits } from './refactorings';
+import { runCommand, getRefactorEdit } from './process';
+import path from 'path';
 const aexec = util.promisify(exec);
 
 async function setUp() {
@@ -33,109 +36,6 @@ async function setUp() {
 	}
 	await aexec(`${environment.path} -m pip install rope`);
 }
-
-async function executeInline(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor) {
-	const inlineScript = path.join(scriptsDir, 'inline.py');
-	const document = editor.document;
-	const offset = document.offsetAt(editor.selection.active);
-
-	let diffs = await run_script(environment.path, [inlineScript, projectDir, document.fileName, offset.toString()]);
-}
-
-async function executeIntroduceParameter(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor) {
-	const introduceParameterScript = path.join(scriptsDir, 'introduce_parameter.py');
-	const document = editor.document;
-	const offset = document.offsetAt(editor.selection.active);
-
-	// const input = await vscode.window.showInputBox().then(parameter_name => {
-	// 	if (!parameter_name) {
-	// 		return;
-	// 	}
-	// 	let diffs = await run_script(environment.path, [introduceParameterScript, projectDir, document.fileName, offset.toString(), parameter_name]);
-	// });
-}
-
-async function executeLocalToField(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor) {
-	const localToFieldScript = path.join(scriptsDir, 'local_to_field.py');
-	const document = editor.document;
-	const offset = document.offsetAt(editor.selection.active);
-
-	let diffs = await run_script(environment.path, [localToFieldScript, projectDir, document.fileName, offset.toString()]);
-}
-
-function runScript(command: string, args: string[], callback: CallableFunction) {
-	const inline = spawn(command, args);
-	let diffs: Array<string> = [];
-
-	inline.stdout.forEach(diff => {
-		diffs.push(diff);
-	});
-
-	inline.stdout.on('end', callback(diffs));
-
-	inline.stderr.on("data", data => {
-		console.log(`stderr: ${data}`);
-	});
-
-	inline.on('error', error => {
-		console.log(`error: ${error.message}`);
-	});
-
-	inline.on("close", code => {
-		console.log(`child process exited with code ${code}`);
-	});
-}
-
-let run_script = util.promisify(runScript);
-
-async function applyDiffs(diffs: Array<string>): Promise<void> {
-	let edit = new vscode.WorkspaceEdit();
-
-}
-
-interface commandExecutor {
-	(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor): Promise<void>
-}
-
-async function runCommand(func: commandExecutor) {
-	const pythonApi: PythonExtension = await PythonExtension.api();
-
-	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
-
-	const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
-	const scriptsDir = path.join(__dirname, '..', 'python');
-	if (!environment) {
-		vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
-		return;
-	}
-	const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.path);
-	if (!workspacePaths) {
-		vscode.window.showInformationMessage('No project selected');
-		return;
-	}
-
-	const editor = vscode.window.activeTextEditor;
-	if (!editor) {
-		vscode.window.showInformationMessage('No editor is open');
-		return;
-	}
-
-	const document = editor.document;
-	if (!document) {
-		vscode.window.showInformationMessage('No file selected');
-		return;
-	}
-
-	const projectDir = workspacePaths.find(path => document.fileName.includes(path));
-	if (!projectDir) {
-		vscode.window.showInformationMessage('No project contains the open file');
-		return;
-	}
-
-	await func(scriptsDir, environment, projectDir, editor);
-
-	vscode.window.showInformationMessage('Done!');
-}
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
@@ -145,32 +45,102 @@ export async function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "python-refactoring" is now active!');
 	await setUp();
 
-	let inline = vscode.commands.registerCommand('python-refactoring.inline', async () => {
-		runCommand(executeInline);
-	});
+	const pythonApi: PythonExtension = await PythonExtension.api();
 
-	let introduceParameter = vscode.commands.registerCommand('python-refactoring.introduce_parameter', async () => {
-		runCommand(executeIntroduceParameter);
-	});
-	let localToField = vscode.commands.registerCommand('python-refactoring.local_to_field', async () => {
-		runCommand(executeLocalToField);
-	});
-	context.subscriptions.push(inline);
-	context.subscriptions.push(introduceParameter);
-	context.subscriptions.push(localToField);
-	class InlineCodeAction implements vscode.CodeActionProvider {
-		static readonly kind = vscode.CodeActionKind.RefactorInline
-		static readonly inlineCodeAction = new vscode.CodeAction('Inline', InlineCodeAction.kind);
-		provideCodeActions(): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
-			let action = structuredClone(InlineCodeAction.inlineCodeAction);
-			action.command = {command: "python-refactoring.inline", title: 'Inline', arguments: []};
-			return [action];
+	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
+
+	const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
+	const scriptsDir = path.join(__dirname, '..', 'python');
+	if (!environment) {
+		vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
+		return null;
+	}
+	const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.path);
+	if (!workspacePaths) {
+		vscode.window.showInformationMessage('No project selected');
+		return null;
+	}
+
+	const editor = vscode.window.activeTextEditor;
+	if (!editor) {
+		vscode.window.showInformationMessage('No editor is open');
+		return null;
+	}
+
+	const document = editor.document;
+	if (!document) {
+		vscode.window.showInformationMessage('No file selected');
+		return null;
+	}
+
+	const projectDir = workspacePaths.find(path => document.fileName.includes(path));
+	if (!projectDir) {
+		vscode.window.showInformationMessage('No project contains the open file');
+		return null;
+	}
+
+	class RefactorCodeActionProvider implements vscode.CodeActionProvider {
+		static readonly actionKinds = [vscode.CodeActionKind.RefactorInline, vscode.CodeActionKind.RefactorExtract];
+		private getInlineAction(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction | null {
+			let action = new vscode.CodeAction('Inline', vscode.CodeActionKind.RefactorInline);
+			if (!environment) {
+				vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
+				return null;
+			}
+			if (!projectDir) {
+				vscode.window.showInformationMessage('No project contains the open file');
+				return null;
+			}
+			let offset = document.offsetAt(range.start);
+			let edit = getInlineEdits(scriptsDir, environment, projectDir, document, offset);
+			if (!edit) {
+				return null;
+			}
+			action.edit = edit;
+			return action;
+		}
+		private getExtractParameterAction(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction | null {
+			let action = new vscode.CodeAction('Extract Parameter', vscode.CodeActionKind.RefactorExtract);
+			if (!environment) {
+				vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
+				return null;
+			}
+			if (!projectDir) {
+				vscode.window.showInformationMessage('No project contains the open file');
+				return null;
+			}
+			let offset = document.offsetAt(range.start);
+			let edit = getExtractParameterEdits(scriptsDir, environment, projectDir, document, offset);
+			if (!edit) {
+				return null;
+			}
+			action.edit = edit;
+			return action;
+		}
+		provideCodeActions(
+			document: vscode.TextDocument,
+			range: vscode.Range | vscode.Selection,
+			context: vscode.CodeActionContext,
+			token: vscode.CancellationToken
+		): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
+			if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
+				return [];
+			}
+			if (context.only?.value !== 'refactor') {
+				return [];
+			}
+			let actions: Array<vscode.CodeAction> = [];
+			let inline = this.getInlineAction(document, range);
+			if (inline) {actions.push(inline);}
+			let extractParameter = this.getExtractParameterAction(document, range);
+			if (extractParameter) {actions.push(extractParameter);}
+			return actions;
 		}
 	}
 	vscode.languages.registerCodeActionsProvider(
 		{ scheme: 'file', language: 'python' },
-		new InlineCodeAction(),
-		{ providedCodeActionKinds: [InlineCodeAction.kind] }
+		new RefactorCodeActionProvider(),
+		{ providedCodeActionKinds: RefactorCodeActionProvider.actionKinds }
 	);
 }
 

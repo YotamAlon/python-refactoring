@@ -1,3 +1,4 @@
+import json
 import sys
 
 from rope.base.project import Project
@@ -14,10 +15,14 @@ def main(project_path: str, resource_path: str, offset: int, parameter_name: str
     introduce_parameter = IntroduceParameter(myproject, resource, offset)
     changes = introduce_parameter.get_changes(parameter_name)
 
-    for change in changes:
-        print(change.get_description())
+    output = []
+    for change in changes.changes:
+        output.append({
+            'path': change.resource.real_path,
+            'new_contents': change.new_contents,
+        })
 
-    myproject.do(changes)
+    json.dump(output, sys.stdout)
 
 
 if __name__ == "__main__":

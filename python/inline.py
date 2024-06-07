@@ -1,3 +1,4 @@
+import json
 import sys
 
 from rope.base.project import Project
@@ -14,10 +15,14 @@ def main(project_path: str, resource_path: str, offset: int):
     inline = create_inline(myproject, resource, offset)
     changes = inline.get_changes()
 
+    output = []
     for change in changes.changes:
-        print(change.get_description())
+        output.append({
+            'path': change.resource.real_path,
+            'new_contents': change.new_contents,
+        })
 
-    myproject.do(changes)
+    json.dump(output, sys.stdout)
 
 
 if __name__ == "__main__":
