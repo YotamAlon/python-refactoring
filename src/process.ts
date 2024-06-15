@@ -1,130 +1,134 @@
 import util from "node:util";
 
-import { spawn, spawnSync } from 'child_process';
-import { PythonExtension, ResolvedEnvironment } from "@vscode/python-extension";
-import * as path from "path";
-import * as vscode from "vscode";
-import { error } from "node:console";
+import { ChildProcess, ChildProcessWithoutNullStreams, spawn } from 'child_process';
+import { ResolvedEnvironment } from "@vscode/python-extension";
+import path from "path";
+import { Serializable, SerializationType } from "node:child_process";
+import EventEmitter from "events";
+import { error, log } from "node:console";
 
+export let asyncRunScript: (command: string, args: string[]) => Promise<string> = util.promisify(runScriptAsync);
 
-interface ScriptOutput {
-	path: string;
-	new_contents: string;
-}
-function runScript(command: string, args: string[], callback: CallableFunction) {
-	const inline = spawn(command, args);
-	let diffs: Array<ScriptOutput> = [];
-
-	inline.stdout.forEach(diff => {
-		diffs.push(JSON.parse(diff));
+export function runScriptAsync(command: string, args: string[], callback: CallableFunction): void {
+	let process = spawn(command, args);
+	let output = '';
+	process.stdout.on('data', data => {
+		output += data.toString();
 	});
-
-	inline.stdout.on('end', callback(diffs));
-
-	inline.stderr.on("data", data => {
-		console.log(`stderr: ${data}`);
-	});
-
-	inline.on('error', error => {
+	process.on('error', error => {
 		console.log(`error: ${error.message}`);
+		callback(error.message, '');
 	});
-
-	inline.on("close", code => {
-		console.log(`child process exited with code ${code}`);
+	process.on('close', (status) => {
+		if (status !== 0) {
+			console.log("status: " + status?.toString());
+			console.log("stdout: " + process.stdout.toString());
+			console.log("stderr: " + process.stderr.toString());
+			callback(null, '');
+		}
+		callback(null, output);
 	});
 }
 
-export let run_script: (command: string, args: string[]) => Promise<Array<ScriptOutput>> = util.promisify(runScript);interface commandExecutor {
-	(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor): Promise<void>;
-}
-export async function runCommand(func: commandExecutor) {
-	const pythonApi: PythonExtension = await PythonExtension.api();
-
-	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
-
-	const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
-	const scriptsDir = path.join(__dirname, '..', 'python');
-	if (!environment) {
-		vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
-		return;
-	}
-	const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.path);
-	if (!workspacePaths) {
-		vscode.window.showInformationMessage('No project selected');
-		return;
-	}
-
-	const editor = vscode.window.activeTextEditor;
-	if (!editor) {
-		vscode.window.showInformationMessage('No editor is open');
-		return;
-	}
-
-	const document = editor.document;
-	if (!document) {
-		vscode.window.showInformationMessage('No file selected');
-		return;
-	}
-
-	const projectDir = workspacePaths.find(path => document.fileName.includes(path));
-	if (!projectDir) {
-		vscode.window.showInformationMessage('No project contains the open file');
-		return;
-	}
-
-	await func(scriptsDir, environment, projectDir, editor);
-
-	vscode.window.showInformationMessage('Done!');
-}
-export async function getRefactorEdit(func: refactorEdit): Promise<vscode.WorkspaceEdit | null> {
-	const pythonApi: PythonExtension = await PythonExtension.api();
-
-	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
-
-	const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
-	const scriptsDir = path.join(__dirname, '..', 'python');
-	if (!environment) {
-		vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
-		return null;
-	}
-	const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.path);
-	if (!workspacePaths) {
-		vscode.window.showInformationMessage('No project selected');
-		return null;
-	}
-
-	const editor = vscode.window.activeTextEditor;
-	if (!editor) {
-		vscode.window.showInformationMessage('No editor is open');
-		return null;
-	}
-
-	const document = editor.document;
-	if (!document) {
-		vscode.window.showInformationMessage('No file selected');
-		return null;
-	}
-
-	const projectDir = workspacePaths.find(path => document.fileName.includes(path));
-	if (!projectDir) {
-		vscode.window.showInformationMessage('No project contains the open file');
-		return null;
-	}
-
-	return await func(scriptsDir, environment, projectDir, editor);
-
-}export interface refactorEdit {
-	(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, editor: vscode.TextEditor): Promise<vscode.WorkspaceEdit | null>;
+enum RefactorType {
+	Inline = 'inline',
+	ExtractParameter = 'introduce_parameter',
 }
 
+export interface ChangedFile {
+	path: string
+	new_contents: string
+}
 
-export function runScriptSync(command: string, args: string[]): string {
-    let process = spawnSync(command, args);
-    if (process.error || process.status !== 0) {
-        console.log("error: " + process.error);
-        console.log("stdout: " + process.stdout.toString());
-        console.log("stderr: " + process.stderr.toString());
-        return '';
+interface Refactor {
+	type: RefactorType,
+	changed_files: Array<ChangedFile>
+}
+
+interface Message {
+	message: string
+}
+
+export class RopeClient {
+	private process: ChildProcessWithoutNullStreams;
+	private emitter: EventEmitter;
+
+	constructor(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string) {
+		let command = environment.path;
+		let args = [path.join(scriptsDir, 'rope-process.py'), projectDir];
+		this.process = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+		this.emitter = new EventEmitter();
+
+        // Listen for data from subprocess stdout
+        this.process.stdout.on('data', (data: Buffer) => {
+            const message = data.toString().trim();
+			console.log(message);
+            try {
+                const json = JSON.parse(message);
+                this.emitter.emit('message', json);
+            } catch (error) {
+                this.emitter.emit('error', new Error(`Failed to parse JSON: ${message}`));
+            }
+        });
+
+        // Listen for errors from subprocess stderr
+        this.process.stderr.on('data', (data: Buffer) => {
+			console.log(data.toString());
+            this.emitter.emit('error', new Error(data.toString().trim()));
+        });
+
+        // Listen for subprocess exit event
+        this.process.on('exit', (code) => {
+			console.log('Process exited with code '+ code?.toString());
+            this.emitter.emit('exit', code);
+        });
     }
-    return process.stdout.toString();
+
+    private async communicate(message: object): Promise<any> {
+        return new Promise((resolve, reject) => {
+            const jsonString = JSON.stringify(message);
+
+            // Function to handle the message event
+            const onMessage = (response: any) => {
+                this.emitter.off('error', onError);
+                resolve(response);
+            };
+
+            // Function to handle the error event
+            const onError = (error: Error) => {
+                this.emitter.off('message', onMessage);
+                reject(error);
+            };
+
+            // Attach one-time listeners
+            this.emitter.once('message', onMessage);
+            this.emitter.once('error', onError);
+
+            // Send the JSON message to the subprocess
+            this.process.stdin.write(jsonString + '\n', (error) => {
+                if (error) {
+                    this.emitter.off('message', onMessage);
+                    this.emitter.off('error', onError);
+                    reject(error);
+                }
+            });
+        });
+    }
+
+	async start(): Promise<void> {
+		let response = await this.communicate({});
+		let message = response as Message;
+		if (message.message !== 'ready') {
+			throw Error('Rope process is not ready!');
+		}
+	}
+
+	async getRefactors(fileName: string, offset: number): Promise<Array<Refactor>> {
+		let response = await this.communicate([fileName, offset]);
+		if (!response) {
+			return [];
+		}
+		let raw_refactors: Array<Refactor> = response as Array<Refactor>;
+		return raw_refactors;
+	}
 }

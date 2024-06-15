@@ -4,10 +4,9 @@ import * as vscode from 'vscode';
 import { PythonExtension } from '@vscode/python-extension';
 import { exec } from "child_process";
 import util from 'node:util';
-import { text } from 'stream/consumers';
-import { executeInline, executeIntroduceParameter, executeLocalToField, getExtractParameterEdits, getInlineEdits } from './refactorings';
-import { runCommand, getRefactorEdit } from './process';
+import { ChangedFile, RopeClient } from './process';
 import path from 'path';
+import { fullRange, groupBy } from './utils';
 const aexec = util.promisify(exec);
 
 async function setUp() {
@@ -45,96 +44,111 @@ export async function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "python-refactoring" is now active!');
 	await setUp();
 
+	const scriptsDir = path.join(__dirname, '..', 'python');
 	const pythonApi: PythonExtension = await PythonExtension.api();
-
 	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
 
-	const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
-	const scriptsDir = path.join(__dirname, '..', 'python');
-	if (!environment) {
+	const resolvedEnvironment = await pythonApi.environments.resolveEnvironment(environmentPath);
+	if (!resolvedEnvironment) {
 		vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
 		return null;
 	}
+	const environment = resolvedEnvironment;
+
+	let projectDir: string;
 	const workspacePaths = vscode.workspace.workspaceFolders?.map(folder => folder.uri.path);
-	if (!workspacePaths) {
+	if (!workspacePaths || workspacePaths?.length === 0) {
 		vscode.window.showInformationMessage('No project selected');
 		return null;
+	} else if (workspacePaths.length > 1) {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showInformationMessage('No editor is open');
+			return null;
+		}
+
+		const document = editor.document;
+		if (!document) {
+			vscode.window.showInformationMessage('No file selected');
+			return null;
+		}
+
+		const chosenProjectDir = workspacePaths.find(path => document.fileName.includes(path));
+		if (!chosenProjectDir) {
+			vscode.window.showInformationMessage('No project contains the open file');
+			return null;
+		}
+		projectDir = chosenProjectDir;
+	} else {
+		projectDir = workspacePaths[0];
 	}
 
-	const editor = vscode.window.activeTextEditor;
-	if (!editor) {
-		vscode.window.showInformationMessage('No editor is open');
-		return null;
-	}
-
-	const document = editor.document;
-	if (!document) {
-		vscode.window.showInformationMessage('No file selected');
-		return null;
-	}
-
-	const projectDir = workspacePaths.find(path => document.fileName.includes(path));
-	if (!projectDir) {
-		vscode.window.showInformationMessage('No project contains the open file');
-		return null;
+	const client = new RopeClient(scriptsDir, environment, projectDir);
+	try {
+		await client.start();
+	} catch (error) {
+		console.log(error);
 	}
 
 	class RefactorCodeActionProvider implements vscode.CodeActionProvider {
 		static readonly actionKinds = [vscode.CodeActionKind.RefactorInline, vscode.CodeActionKind.RefactorExtract];
-		private getInlineAction(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction | null {
-			let action = new vscode.CodeAction('Inline', vscode.CodeActionKind.RefactorInline);
-			if (!environment) {
-				vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
-				return null;
-			}
-			if (!projectDir) {
-				vscode.window.showInformationMessage('No project contains the open file');
-				return null;
-			}
-			let offset = document.offsetAt(range.start);
-			let edit = getInlineEdits(scriptsDir, environment, projectDir, document, offset);
-			if (!edit) {
-				return null;
-			}
-			action.edit = edit;
-			return action;
-		}
-		private getExtractParameterAction(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction | null {
-			let action = new vscode.CodeAction('Extract Parameter', vscode.CodeActionKind.RefactorExtract);
-			if (!environment) {
-				vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
-				return null;
-			}
-			if (!projectDir) {
-				vscode.window.showInformationMessage('No project contains the open file');
-				return null;
-			}
-			let offset = document.offsetAt(range.start);
-			let edit = getExtractParameterEdits(scriptsDir, environment, projectDir, document, offset);
-			if (!edit) {
-				return null;
-			}
-			action.edit = edit;
-			return action;
-		}
+
 		provideCodeActions(
 			document: vscode.TextDocument,
 			range: vscode.Range | vscode.Selection,
 			context: vscode.CodeActionContext,
 			token: vscode.CancellationToken
-		): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
+		): vscode.ProviderResult<Array<vscode.CodeAction>> {
 			if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
 				return [];
 			}
 			if (context.only?.value !== 'refactor') {
 				return [];
 			}
-			let actions: Array<vscode.CodeAction> = [];
-			let inline = this.getInlineAction(document, range);
-			if (inline) {actions.push(inline);}
-			let extractParameter = this.getExtractParameterAction(document, range);
-			if (extractParameter) {actions.push(extractParameter);}
-			return actions;
+			let provider = this;
+			async function getActions(): Promise<Array<vscode.CodeAction>> {
+				function notNull<TValue>(value: TValue | null): value is TValue {
+					return value !== null;
+				}
+				let offset = document.offsetAt(range.start);
+				let raw_actions = await client.getRefactors(document.fileName, offset);
+				let actions = await Promise.all(raw_actions.map(async raw_action => {
+					let action: vscode.CodeAction;
+					if (raw_action.type === 'inline') {
+						action = new vscode.CodeAction('Inline', vscode.CodeActionKind.RefactorInline);
+					} else if (raw_action.type === 'introduce_parameter') {
+						action = new vscode.CodeAction('Extract Parameter', vscode.CodeActionKind.RefactorExtract);
+					} else {
+						throw new Error(`Unknown refactor type ${raw_action.type}`);
+					}
+					let workspaceEdit = await provider.editFromChangedFiles(raw_action.changed_files);
+					action.edit = workspaceEdit;
+					return action;
+				}));
+				let validActions = actions.filter(notNull);
+
+				return validActions;
+			}
+			return getActions();
+		}
+
+		private async editFromChangedFiles(changed_files: Array<ChangedFile>) {
+			let editsAndUris = await Promise.all(changed_files.map(async (changed_file) => {
+				let uri = vscode.Uri.file(changed_file.path);
+				let document = await vscode.workspace.openTextDocument(uri);
+				let range = fullRange(document);
+				return { uri: uri, edit: new vscode.TextEdit(range, changed_file.new_contents) };
+			}));
+			let textEditsBypath = groupBy(editsAndUris, (item => { return item.uri.path; }));
+
+			let workspaceEdit = new vscode.WorkspaceEdit();
+
+			for (const [path, editsWithUris] of Object.entries(textEditsBypath)) {
+				let uri = editsWithUris[0].uri;
+				let edits = editsAndUris.map(item => { return item.edit; });
+				workspaceEdit.set(uri, edits);
+			}
+			return workspaceEdit;
 		}
 	}
 	vscode.languages.registerCodeActionsProvider(
