@@ -2,8 +2,10 @@
   "name": "python-refactoring",
   "displayName": "Python Refactoring",
   "description": "",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "homepage": "https://github.com/YotamAlon/python-refactoring",
+  "icon": "assets/icon.png",
+  "publisher": "YotamAlon",
   "repository": {
     "type": "git",
     "url": "https://github.com/YotamAlon/python-refactoring.git"
@@ -35,7 +37,7 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile; pip install --upgrade --target bundled/ -r requirements.txt",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",

@@ -2,39 +2,10 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { PythonExtension } from '@vscode/python-extension';
-import { exec } from "child_process";
-import util from 'node:util';
 import { ChangedFile, RopeClient } from './process';
 import path from 'path';
 import { fullRange, groupBy } from './utils';
-const aexec = util.promisify(exec);
 
-async function setUp() {
-	const pythonApi: PythonExtension = await PythonExtension.api();
-
-	// This will return something like /usr/bin/python
-	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
-
-	// `environmentPath.path` carries the value of the setting. Note that this path may point to a folder and not the
-	// python binary. Depends entirely on how the env was created.
-	// E.g., `conda create -n myenv python` ensures the env has a python binary
-	// `conda create -n myenv` does not include a python binary.
-	// Also, the path specified may not be valid, use the following to get complete details for this environment if
-	// need be.
-
-	const environment = await pythonApi.environments.resolveEnvironment(environmentPath);
-	if (!environment) {
-		vscode.window.showInformationMessage('No environment configured, cannot execute refactoring!');
-		return;
-	}
-	if (environment.environment?.type !== 'VirtualEnvironment') {
-		vscode.window.showInformationMessage(
-			'python refactorings currently require the use of a virtual evironment'
-		);
-		return;
-	}
-	await aexec(`${environment.path} -m pip install rope`);
-}
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
@@ -42,7 +13,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "python-refactoring" is now active!');
-	await setUp();
 
 	const scriptsDir = path.join(__dirname, '..', 'python');
 	const pythonApi: PythonExtension = await PythonExtension.api();

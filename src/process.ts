@@ -55,7 +55,7 @@ export class RopeClient {
 
 	constructor(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string) {
 		let command = environment.path;
-		let args = [path.join(scriptsDir, 'rope-process.py'), projectDir];
+		let args = [path.join(scriptsDir, 'rope_server.py'), projectDir];
 		this.process = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 		this.emitter = new EventEmitter();
 

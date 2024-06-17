@@ -17,7 +17,7 @@ Currently None
 
 ## Known Issues
 
-* Extension installs the rope library into the user's python environment.
+Nothing right now. Let me know if you find anything!
 
 ## Release Notes
 

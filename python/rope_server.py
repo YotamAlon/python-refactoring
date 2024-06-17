@@ -1,6 +1,12 @@
 import json
+import os
+import pathlib
 import sys
 import traceback
+
+BUNDLE_DIR = pathlib.Path(__file__).parent.parent / "bundled"
+
+sys.path.insert(0, os.fspath(BUNDLE_DIR))
 
 from rope.base.project import Project
 from rope.base import libutils
