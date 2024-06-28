@@ -19,8 +19,15 @@ refactorings = {
 }
 
 
-def main(project_path: str) -> None:
-    myproject = Project(project_path)
+def main(project_path: str, configuration: dict) -> None:
+    ignored_resources = configuration['ignored_resources']
+    source_folders = configuration['ignored_resources']
+
+    prefs = {'ignored_resources': ignored_resources}
+    if source_folders:
+        prefs['source_folders'] = source_folders
+        
+    myproject = Project(project_path, **prefs)
     libutils.analyze_modules(myproject)
     input()
     print(json.dumps({"message": "ready"}))
@@ -49,4 +56,4 @@ def main(project_path: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], json.loads(sys.argv[2]))

@@ -12,8 +12,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "python-refactoring" is now active!');
-
+	console.log('python-refactoring starting activation');
+	const config = vscode.workspace.getConfiguration('rope');
+	
 	const scriptsDir = path.join(__dirname, '..', 'python');
 	const pythonApi: PythonExtension = await PythonExtension.api();
 	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
@@ -53,7 +54,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		projectDir = workspacePaths[0];
 	}
 
-	const client = new RopeClient(scriptsDir, environment, projectDir);
+	const client = new RopeClient(scriptsDir, environment, projectDir, config);
 	try {
 		await client.start();
 	} catch (error) {
@@ -62,7 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	class RefactorCodeActionProvider implements vscode.CodeActionProvider {
 		static readonly actionKinds = [vscode.CodeActionKind.RefactorInline, vscode.CodeActionKind.RefactorExtract];
-
+		
 		provideCodeActions(
 			document: vscode.TextDocument,
 			range: vscode.Range | vscode.Selection,
@@ -126,6 +127,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		new RefactorCodeActionProvider(),
 		{ providedCodeActionKinds: RefactorCodeActionProvider.actionKinds }
 	);
+	console.log('Congratulations, your extension "python-refactoring" is now active!');
 }
 
 // This method is called when your extension is deactivated

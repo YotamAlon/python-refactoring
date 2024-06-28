@@ -1,11 +1,11 @@
 import util from "node:util";
 
-import { ChildProcess, ChildProcessWithoutNullStreams, spawn } from 'child_process';
+import * as vscode from 'vscode';
+import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { ResolvedEnvironment } from "@vscode/python-extension";
 import path from "path";
-import { Serializable, SerializationType } from "node:child_process";
 import EventEmitter from "events";
-import { error, log } from "node:console";
+
 
 export let asyncRunScript: (command: string, args: string[]) => Promise<string> = util.promisify(runScriptAsync);
 
@@ -53,9 +53,10 @@ export class RopeClient {
 	private process: ChildProcessWithoutNullStreams;
 	private emitter: EventEmitter;
 
-	constructor(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string) {
+	constructor(scriptsDir: string, environment: ResolvedEnvironment, projectDir: string, config: vscode.WorkspaceConfiguration) {
 		let command = environment.path;
-		let args = [path.join(scriptsDir, 'rope_server.py'), projectDir];
+		let configuration = {ignored_resources: config.get('ignored_resources'), source_folders: config.get('source_folders')};
+		let args = [path.join(scriptsDir, 'rope_server.py'), projectDir, JSON.stringify(configuration)];
 		this.process = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 		this.emitter = new EventEmitter();
 

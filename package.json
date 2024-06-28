@@ -34,15 +34,39 @@
         "command": "python-refactoring.local_to_field",
         "title": "Refactor: Change a local variable to field"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "python-refactoring",
+      "type": "object",
+      "properties": {
+        "rope.ignored_resources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Specify which files and folders to ignore in the project",
+          "order": 0
+        },
+        "rope.source_folders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Custom source folders",
+          "order": 1
+        }
+      
+      }
+    }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile; pip install --upgrade --target bundled/ -r requirements.txt",
+    "vscode:prepublish": "npm run compile && npm run bundle",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "npm run compile && npm run bundle && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "bundle": "pip install --upgrade --target bundled/ -r requirements.txt"
   },
   "extensionDependencies": [
     "ms-python.python"
