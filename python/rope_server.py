@@ -3,6 +3,7 @@ import os
 import pathlib
 import sys
 import traceback
+from typing import Any
 
 BUNDLE_DIR = pathlib.Path(__file__).parent.parent / "bundled"
 
@@ -18,10 +19,20 @@ refactorings = {
     "introduce_parameter": lambda *args: IntroduceParameter(*args).get_changes("new_param"),
 }
 
+def log(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+    with open('rope-server.log', 'a+') as log_file:
+        print(message, file=log_file)
+
+
+def send_output(obj: Any) -> None:
+    json.dump(obj, sys.stdout)
+
 
 def main(project_path: str, configuration: dict) -> None:
-    ignored_resources = configuration['ignored_resources']
-    source_folders = configuration['ignored_resources']
+    log('Starting main')
+    ignored_resources = configuration.get('ignored_resources', [])
+    source_folders = configuration.get('source_folders')
 
     prefs = {'ignored_resources': ignored_resources}
     if source_folders:
@@ -29,8 +40,9 @@ def main(project_path: str, configuration: dict) -> None:
         
     myproject = Project(project_path, **prefs)
     libutils.analyze_modules(myproject)
+    log('Analyzed project, waiting for start signal')
     input()
-    print(json.dumps({"message": "ready"}))
+    send_output({"message": "ready"})
     while True:
         [file, offset] = json.loads(input())
         resource = libutils.path_to_resource(myproject, file)
@@ -52,7 +64,7 @@ def main(project_path: str, configuration: dict) -> None:
 
                 output.append({"type": name, "changed_files": changed_files})
 
-        json.dump(output, sys.stdout)
+        send_output(output)
 
 
 if __name__ == "__main__":

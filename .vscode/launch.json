@@ -24,6 +24,18 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+		{
+            "name": "Python: rope server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/yotam/Projects/python-refactoring/python/rope_server.py",
+			"args": [
+				"/home/yotam/Projects/test",
+				"{\"ignored_resources\":[\"fail*\"],\"source_folders\":[]}"
+			],
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
 	]
 }

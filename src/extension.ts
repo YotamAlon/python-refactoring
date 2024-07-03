@@ -53,13 +53,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	} else {
 		projectDir = workspacePaths[0];
 	}
+	console.log(`Detected project ${projectDir}`);
 
-	const client = new RopeClient(scriptsDir, environment, projectDir, config);
-	try {
-		await client.start();
-	} catch (error) {
-		console.log(error);
-	}
+	const client = new RopeClient(scriptsDir, environment, projectDir);
+	client.setConfiguration({ignored_resources: config.get('ignored_resources'), source_folders: config.get('source_folders')});
+	await client.start();
 
 	class RefactorCodeActionProvider implements vscode.CodeActionProvider {
 		static readonly actionKinds = [vscode.CodeActionKind.RefactorInline, vscode.CodeActionKind.RefactorExtract];
@@ -77,6 +75,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				return [];
 			}
 			let provider = this;
+			console.log(`Getting actions for ${document.fileName}`);
 			async function getActions(): Promise<Array<vscode.CodeAction>> {
 				function notNull<TValue>(value: TValue | null): value is TValue {
 					return value !== null;
@@ -121,12 +120,21 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 			return workspaceEdit;
 		}
-	}
+	};
 	vscode.languages.registerCodeActionsProvider(
 		{ scheme: 'file', language: 'python' },
 		new RefactorCodeActionProvider(),
 		{ providedCodeActionKinds: RefactorCodeActionProvider.actionKinds }
 	);
+	vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
+		if (event.affectsConfiguration('rope.ignored_resources') || event.affectsConfiguration('rope.source_folders')) {
+			client.setConfiguration({ignored_resources: config.get('ignored_resources'), source_folders: config.get('source_folders')});
+			client.restart();
+		} else {
+			throw Error(`unexpected configuration change event ${event}`);
+		}
+	});
+
 	console.log('Congratulations, your extension "python-refactoring" is now active!');
 }
 
