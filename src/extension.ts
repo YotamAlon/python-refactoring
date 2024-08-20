@@ -1,21 +1,40 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+"use strict";
+
 import * as vscode from 'vscode';
-import { PythonExtension } from '@vscode/python-extension';
-import { ChangedFile, RopeClient } from './process';
 import path from 'path';
-import { fullRange, groupBy } from './utils';
+import { PythonExtension } from '@vscode/python-extension';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+} from "vscode-languageclient/node";
+
+const lspConfigKey = "pylsp";
+let client: LanguageClient;
+
+function getLanguageClient(
+    bundleDir: string,
+  command: string,
+  args: string[],
+  documentSelector: string[]
+): LanguageClient {
+  const serverOptions: ServerOptions = {
+    command: command,
+    args: args,
+    options: {cwd: bundleDir}
+  };
+  const clientOptions: LanguageClientOptions = {
+    documentSelector: documentSelector,
+    synchronize: {
+      configurationSection: lspConfigKey,
+    },
+  };
+  return new LanguageClient(command, serverOptions, clientOptions);
+}
+
 export async function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('python-refactoring starting activation');
-	const config = vscode.workspace.getConfiguration('rope');
-	
-	const scriptsDir = path.join(__dirname, '..', 'python');
+	const pythonRootDir = path.join(__dirname, '..', 'bundled');
 	const pythonApi: PythonExtension = await PythonExtension.api();
 	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
 
@@ -53,90 +72,24 @@ export async function activate(context: vscode.ExtensionContext) {
 	} else {
 		projectDir = workspacePaths[0];
 	}
-	console.log(`Detected project ${projectDir}`);
+  const getClient = () => getLanguageClient(pythonRootDir, environment.path, ["-m", "pylsp", "-vv"], ["python"]);
 
-	const client = new RopeClient(scriptsDir, environment, projectDir);
-	client.setConfiguration({ignored_resources: config.get('ignored_resources'), source_folders: config.get('source_folders')});
-	await client.start();
+  client = getClient();
+  context.subscriptions.push(client.start());
 
-	class RefactorCodeActionProvider implements vscode.CodeActionProvider {
-		static readonly actionKinds = [vscode.CodeActionKind.RefactorInline, vscode.CodeActionKind.RefactorExtract];
-		
-		provideCodeActions(
-			document: vscode.TextDocument,
-			range: vscode.Range | vscode.Selection,
-			context: vscode.CodeActionContext,
-			token: vscode.CancellationToken
-		): vscode.ProviderResult<Array<vscode.CodeAction>> {
-			if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
-				return [];
-			}
-			if (context.only?.value !== 'refactor') {
-				return [];
-			}
-			let provider = this;
-			console.log(`Getting actions for ${document.fileName}`);
-			async function getActions(): Promise<Array<vscode.CodeAction>> {
-				function notNull<TValue>(value: TValue | null): value is TValue {
-					return value !== null;
-				}
-				let offset = document.offsetAt(range.start);
-				let raw_actions = await client.getRefactors(document.fileName, offset);
-				let actions = await Promise.all(raw_actions.map(async raw_action => {
-					let action: vscode.CodeAction;
-					if (raw_action.type === 'inline') {
-						action = new vscode.CodeAction('Inline', vscode.CodeActionKind.RefactorInline);
-					} else if (raw_action.type === 'introduce_parameter') {
-						action = new vscode.CodeAction('Extract Parameter', vscode.CodeActionKind.RefactorExtract);
-					} else {
-						throw new Error(`Unknown refactor type ${raw_action.type}`);
-					}
-					let workspaceEdit = await provider.editFromChangedFiles(raw_action.changed_files);
-					action.edit = workspaceEdit;
-					return action;
-				}));
-				let validActions = actions.filter(notNull);
-
-				return validActions;
-			}
-			return getActions();
-		}
-
-		private async editFromChangedFiles(changed_files: Array<ChangedFile>) {
-			let editsAndUris = await Promise.all(changed_files.map(async (changed_file) => {
-				let uri = vscode.Uri.file(changed_file.path);
-				let document = await vscode.workspace.openTextDocument(uri);
-				let range = fullRange(document);
-				return { uri: uri, edit: new vscode.TextEdit(range, changed_file.new_contents) };
-			}));
-			let textEditsBypath = groupBy(editsAndUris, (item => { return item.uri.path; }));
-
-			let workspaceEdit = new vscode.WorkspaceEdit();
-
-			for (const [path, editsWithUris] of Object.entries(textEditsBypath)) {
-				let uri = editsWithUris[0].uri;
-				let edits = editsAndUris.map(item => { return item.edit; });
-				workspaceEdit.set(uri, edits);
-			}
-			return workspaceEdit;
-		}
-	};
-	vscode.languages.registerCodeActionsProvider(
-		{ scheme: 'file', language: 'python' },
-		new RefactorCodeActionProvider(),
-		{ providedCodeActionKinds: RefactorCodeActionProvider.actionKinds }
-	);
-	vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
-		if (event.affectsConfiguration('rope.ignored_resources') || event.affectsConfiguration('rope.source_folders')) {
-			client.setConfiguration({ignored_resources: config.get('ignored_resources'), source_folders: config.get('source_folders')});
-			client.restart();
-		} else {
-			throw Error(`unexpected configuration change event ${event}`);
-		}
-	});
-
-	console.log('Congratulations, your extension "python-refactoring" is now active!');
+  context.subscriptions.push(
+    vscode.commands.registerCommand(`${lspConfigKey}.restartServer`, async () => {
+      await killServer();
+      client = getClient();
+      client.start();
+    })
+  );
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() { }
+export function deactivate(): Thenable<void> | undefined {
+  return killServer();
+}
+
+async function killServer(): Promise<void> {
+  await client.stop();
+}
