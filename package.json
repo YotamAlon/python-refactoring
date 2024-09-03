@@ -2,7 +2,7 @@
   "name": "python-refactoring",
   "displayName": "Python Refactoring",
   "description": "",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "homepage": "https://github.com/YotamAlon/python-refactoring",
   "icon": "assets/icon.png",
   "publisher": "YotamAlon",
@@ -21,20 +21,6 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "python-refactoring.inline",
-        "title": "Refactor: Inline"
-      },
-      {
-        "command": "python-refactoring.introduce_parameter",
-        "title": "Refactor: Introduce parameter"
-      },
-      {
-        "command": "python-refactoring.local_to_field",
-        "title": "Refactor: Change a local variable to field"
-      }
-    ],
     "configuration": {
       "title": "python-refactoring",
       "type": "object",
