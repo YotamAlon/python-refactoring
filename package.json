@@ -2,7 +2,7 @@
   "name": "python-refactoring",
   "displayName": "Python Refactoring",
   "description": "",
-  "version": "0.0.8",
+  "version": "0.0.12",
   "homepage": "https://github.com/YotamAlon/python-refactoring",
   "icon": "assets/icon.png",
   "publisher": "YotamAlon",
@@ -25,22 +25,6 @@
       "title": "python-refactoring",
       "type": "object",
       "properties": {
-        "rope.ignored_resources": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Specify which files and folders to ignore in the project",
-          "order": 0
-        },
-        "rope.source_folders": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Custom source folders",
-          "order": 1
-        },
         "pylsp.configurationSources": {
           "type": "array",
           "default": [
@@ -55,6 +39,61 @@
             ]
           },
           "uniqueItems": true
+        },
+        "pylsp.plugins.flake8.config": {
+          "type": "string",
+          "default": null,
+          "description": "Path to the config file that will be the authoritative config source."
+        },
+        "pylsp.plugins.flake8.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable or disable the plugin."
+        },
+        "pylsp.plugins.flake8.exclude": {
+          "type": "array",
+          "default": null,
+          "description": "List of files or directories to exclude."
+        },
+        "pylsp.plugins.flake8.executable": {
+          "type": "string",
+          "default": "flake8",
+          "description": "Path to the flake8 executable."
+        },
+        "pylsp.plugins.flake8.filename": {
+          "type": "string",
+          "default": null,
+          "description": "Only check for filenames matching the patterns in this list."
+        },
+        "pylsp.plugins.flake8.hangClosing": {
+          "type": "boolean",
+          "default": null,
+          "description": "Hang closing bracket instead of matching indentation of opening bracket's line."
+        },
+        "pylsp.plugins.flake8.ignore": {
+          "type": "array",
+          "default": null,
+          "description": "List of errors and warnings to ignore (or skip)."
+        },
+        "pylsp.plugins.flake8.maxLineLength": {
+          "type": "integer",
+          "default": null,
+          "description": "Maximum allowed line length for the entirety of this run."
+        },
+        "pylsp.plugins.flake8.indentSize": {
+          "type": "integer",
+          "default": null,
+          "description": "Set indentation spaces."
+        },
+        "pylsp.plugins.flake8.perFileIgnores": {
+          "type": "array",
+          "default": null,
+          "description": "A pairing of filenames and violation codes that defines which violations to ignore in a particular file, for example: `[\"file_path.py:W305,W304\"]`)."
+        },
+        "pylsp.plugins.flake8.select": {
+          "type": "array",
+          "default": null,
+          "description": "List of errors and warnings to enable."
         },
         "pylsp.plugins.jedi.extra_paths": {
           "type": "array",
@@ -73,7 +112,7 @@
         },
         "pylsp.plugins.jedi_completion.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.jedi_completion.include_params": {
@@ -116,7 +155,7 @@
         },
         "pylsp.plugins.jedi_definition.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.jedi_definition.follow_imports": {
@@ -131,22 +170,22 @@
         },
         "pylsp.plugins.jedi_hover.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.jedi_references.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.jedi_signature_help.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.jedi_symbols.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.jedi_symbols.all_scopes": {
@@ -161,7 +200,7 @@
         },
         "pylsp.plugins.mccabe.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.mccabe.threshold": {
@@ -171,7 +210,7 @@
         },
         "pylsp.plugins.preload.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.preload.modules": {
@@ -185,7 +224,7 @@
         },
         "pylsp.plugins.pycodestyle.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.plugins.pycodestyle.exclude": {
@@ -299,6 +338,30 @@
           "default": "[^\\.].*",
           "description": "Search only dirs that exactly match the given regular expression; default is to match dirs which do not begin with a dot."
         },
+        "pylsp.plugins.pyflakes.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable or disable the plugin."
+        },
+        "pylsp.plugins.pylint.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable or disable the plugin."
+        },
+        "pylsp.plugins.pylint.args": {
+          "type": "array",
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": false,
+          "description": "Arguments to pass to pylint."
+        },
+        "pylsp.plugins.pylint.executable": {
+          "type": "string",
+          "default": null,
+          "description": "Executable to run pylint with. Enabling this will run pylint on unsaved files via stdin. Can slow down workflow. Only works with python3."
+        },
         "pylsp.plugins.rope_completion.enabled": {
           "type": "boolean",
           "default": true,
@@ -306,12 +369,12 @@
         },
         "pylsp.plugins.rope_completion.eager": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Resolve documentation and detail eagerly."
         },
         "pylsp.plugins.yapf.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Enable or disable the plugin."
         },
         "pylsp.rope.extensionModules": {
@@ -327,12 +390,15 @@
           },
           "uniqueItems": true,
           "description": "The name of the folder in which rope stores project configurations and data.  Pass `null` for not using such a folder at all."
+        },
+        "pylsp.executable": {
+          "type": "string",
+          "default": "pylsp",
+          "description": "Language server executable"
         }
       }
-      
-      }
     }
-  ,
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile && npm run bundle",
     "compile": "tsc -p ./",
