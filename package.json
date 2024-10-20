@@ -2,7 +2,7 @@
   "name": "python-refactoring",
   "displayName": "Python Refactoring",
   "description": "",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "homepage": "https://github.com/YotamAlon/python-refactoring",
   "icon": "assets/icon.png",
   "publisher": "YotamAlon",
@@ -22,7 +22,7 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "python-refactoring",
+      "title": "Python Refactoring",
       "type": "object",
       "properties": {
         "pylsp.configurationSources": {

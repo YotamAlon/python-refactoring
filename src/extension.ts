@@ -5,6 +5,7 @@ import path from 'path';
 import { PythonExtension } from '@vscode/python-extension';
 import * as util from 'util';
 import {
+	Executable,
 	LanguageClient,
 	LanguageClientOptions,
 	ServerOptions,
@@ -13,26 +14,31 @@ import {
 const lspConfigKey = "pylsp";
 let client: LanguageClient;
 
-function getLanguageClient(
+function startPylspServer(
 	bundleDir: string,
-	command: string,
-	args: string[],
-	documentSelector: string[],
+	python_path: string,
 	outputChannel: vscode.LogOutputChannel,
 ): LanguageClient {
-	const serverOptions: ServerOptions = {
-		command: command,
-		args: args,
+	
+	const run_executable: Executable = {
+		command: python_path,
+		args: ["-m", "pylsp"],
 		options: { cwd: bundleDir }
 	};
+	const debug_executable: Executable = {
+		command: python_path,
+		args: ["-Xfrozen_modules=off", "-m", "debugpy", "--listen", "5678", "--wait-for-client", "-m", "pylsp", "-vv"],
+		options: { cwd: bundleDir }
+	};
+	const serverOptions: ServerOptions = {run: run_executable, debug: debug_executable};
 	const clientOptions: LanguageClientOptions = {
-		documentSelector: documentSelector,
+		documentSelector: ["python"],
 		synchronize: {
 			configurationSection: lspConfigKey,
 		},
 		outputChannel: outputChannel
 	};
-	return new LanguageClient(command, serverOptions, clientOptions);
+	return new LanguageClient(python_path, serverOptions, clientOptions);
 }
 
 type Arguments = unknown[];
@@ -85,7 +91,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 	const environment = resolvedEnvironment;
 
-	const getClient = () => getLanguageClient(pythonRootDir, environment.path, ["-m", "pylsp", "-vv"], ["python"], outputChannel);
+	const getClient = () => startPylspServer(pythonRootDir, environment.path, outputChannel);
 
 	client = getClient();
 
