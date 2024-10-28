@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-refactoring"
+dynamic = ["version"]
+dependencies = [
+    "python-lsp-server",
+    "pylsp-rope @ git+https://github.com/YotamAlon/pylsp-rope.git",
+    
+]
+
+[project.optional-dependencies]
+dev = [
+    "debugpy",
+]
+
+[tool.distutils.egg_info]
+egg_base = "build"

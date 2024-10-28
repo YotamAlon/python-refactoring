@@ -1,8 +1,10 @@
 out
 dist
+build
 node_modules
 .vscode-test/
 *.vsix
 .venv/
 __pycache__/
 bundled/
+bundledev/

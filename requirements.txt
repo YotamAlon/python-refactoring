@@ -1,3 +1,0 @@
-python-lsp-server
-pylsp-rope
-debugpy

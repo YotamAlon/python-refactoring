@@ -15,7 +15,7 @@ const lspConfigKey = "pylsp";
 let client: LanguageClient;
 
 function startPylspServer(
-	bundleDir: string,
+	rootDir: string,
 	python_path: string,
 	outputChannel: vscode.LogOutputChannel,
 ): LanguageClient {
@@ -23,12 +23,12 @@ function startPylspServer(
 	const run_executable: Executable = {
 		command: python_path,
 		args: ["-m", "pylsp"],
-		options: { cwd: bundleDir }
+		options: { cwd: path.join(rootDir, "bundled") }
 	};
 	const debug_executable: Executable = {
 		command: python_path,
 		args: ["-Xfrozen_modules=off", "-m", "debugpy", "--listen", "5678", "--wait-for-client", "-m", "pylsp", "-vv"],
-		options: { cwd: bundleDir }
+		options: { cwd: path.join(rootDir, "bundledev") }
 	};
 	const serverOptions: ServerOptions = {run: run_executable, debug: debug_executable};
 	const clientOptions: LanguageClientOptions = {
@@ -79,7 +79,7 @@ export function registerLogger(outputChannel: vscode.LogOutputChannel): vscode.D
 export async function activate(context: vscode.ExtensionContext) {
 	let outputChannel = vscode.window.createOutputChannel("Python Refactoring", { log: true });
 	context.subscriptions.push(outputChannel, registerLogger(outputChannel));
-	const pythonRootDir = path.join(__dirname, '..', 'bundled');
+	const RootDir = path.join(__dirname, '..');
 	
 	const pythonApi: PythonExtension = await PythonExtension.api();
 	const environmentPath = pythonApi.environments.getActiveEnvironmentPath();
@@ -91,7 +91,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 	const environment = resolvedEnvironment;
 
-	const getClient = () => startPylspServer(pythonRootDir, environment.path, outputChannel);
+	const getClient = () => startPylspServer(RootDir, environment.path, outputChannel);
 
 	client = getClient();
 

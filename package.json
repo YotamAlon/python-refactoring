@@ -2,7 +2,7 @@
   "name": "python-refactoring",
   "displayName": "Python Refactoring",
   "description": "",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "homepage": "https://github.com/YotamAlon/python-refactoring",
   "icon": "assets/icon.png",
   "publisher": "YotamAlon",
@@ -403,10 +403,11 @@
     "vscode:prepublish": "npm run compile && npm run bundle",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run bundle && npm run lint",
+    "pretest": "npm run compile && npm run bundle && npm run lint & npm run bundle-dev",
     "lint": "eslint src --ext ts",
     "test": "vscode-test",
-    "bundle": "pip install --upgrade --target bundled/ -r requirements.txt"
+    "bundle": "pip install --upgrade --target bundled/ .",
+    "bundle-dev": "pip install --target bundledev/ .[dev]"
   },
   "extensionDependencies": [
     "ms-python.python"
